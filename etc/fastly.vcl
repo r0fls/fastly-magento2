@@ -16,7 +16,20 @@
 
 sub vcl_recv {
 #FASTLY recv
+    # Magento handles session information using javascript. So we should remove these cookies from Fastly.
+    
+    if (req.http.Cookie) {
+    set req.http.Cookie = ";" + req.http.Cookie;
+    set req.http.Cookie = regsuball(req.http.Cookie, "; +", ";");
+    set req.http.Cookie = regsuball(req.http.Cookie, ";(mage-messages)=", "; \1=");
+    set req.http.Cookie = regsuball(req.http.Cookie, ";[^ ][^;]*", "");
+    set req.http.Cookie = regsuball(req.http.Cookie, "^[; ]+|[; ]+$", "");
 
+    if (req.http.Cookie == "") {
+        remove req.http.Cookie;
+    }
+}
+    
     # auth for purging
     if (req.request == "FASTLYPURGE") {
         # extract token signature and expiration
@@ -273,7 +286,8 @@ sub vcl_hash {
     set req.hash += req.http.Https;
     set req.hash += req.http.host;
     set req.hash += req.url;
-
+    
+    
     if (req.http.cookie ~ "X-Magento-Vary=") {
         set req.http.X-Magento-Vary = regsub(req.http.cookie, "^.*?X-Magento-Vary=([^;]+);*.*$", "\1");
         set req.hash += req.http.X-Magento-Vary;
@@ -281,7 +295,7 @@ sub vcl_hash {
     }
     
     set req.hash += "#####GENERATION#####";
-
+    
     ### {{ design_exceptions_code }} ###
 
     return (hash);
